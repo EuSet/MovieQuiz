@@ -1,32 +1,37 @@
 import UIKit
 
-struct QuizQuestion {
-  let image: String
-  let text: String
-  let correctAnswer: Bool
-}
-
-struct QuizStepViewModel {
-  let image: UIImage
-  let question: String
-  let questionNumber: String
-}
-
-struct QuizResultsViewModel {
-  let title: String
-  let text: String
-  let buttonText: String
-}
-
 final class MovieQuizViewController: UIViewController {
+    //MARK: - IB Outlets
+    @IBOutlet weak private var questionTitleLabel: UILabel!
     @IBOutlet weak private var questionLabel: UILabel!
-    @IBOutlet weak private var imageView: UIImageView!
     @IBOutlet weak private var questionCounterLabel: UILabel!
+    
+    @IBOutlet weak private var imageView: UIImageView!
+    
     @IBOutlet weak private var yesAnswerButton: UIButton!
     @IBOutlet weak private var noAnswerButton: UIButton!
     
+    // MARK: - Private Properties
     private var currentQuestionIndex = 0
     private var correctAnswers = 0
+    
+    private struct QuizQuestion {
+      let image: String
+      let text: String
+      let correctAnswer: Bool
+    }
+
+    private struct QuizStepViewModel {
+      let image: UIImage
+      let question: String
+      let questionNumber: String
+    }
+
+    private struct QuizResultsViewModel {
+      let title: String
+      let text: String
+      let buttonText: String
+    }
     
     private let questions: [QuizQuestion] = [
         QuizQuestion(image: "The Godfather", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: true),
@@ -41,15 +46,21 @@ final class MovieQuizViewController: UIViewController {
         QuizQuestion(image: "Vivarium", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: false),
     ]
     
+    // MARK: - View Life Cycles
     override func viewDidLoad() {
         super.viewDidLoad()
-        //добавление чере User Defined Runtime Attributes не работает
         yesAnswerButton.layer.cornerRadius = 15
         noAnswerButton.layer.cornerRadius = 15
+        questionLabel.font = UIFont(name: AppFontName.displayMedium, size: 23)
+        questionCounterLabel.font = UIFont(name: AppFontName.displayMedium, size: 20)
+        questionTitleLabel.font = UIFont(name: AppFontName.displayMedium, size: 20)
+        yesAnswerButton.titleLabel?.font = UIFont(name: AppFontName.displayMedium, size: 20)
+        noAnswerButton.titleLabel?.font = UIFont(name: AppFontName.displayMedium, size: 20)
         showQuestionHandler()
         
     }
     
+    // MARK: - IB Actions
     @IBAction private func handleYesButtonTouchUp(_ sender: UIButton) {
         handleAnswerResult(answer: true)
     }
@@ -58,7 +69,19 @@ final class MovieQuizViewController: UIViewController {
         handleAnswerResult(answer: false)
     }
     
+    // MARK: - Private Methods
+    private func disableAnswerButtons() {
+        yesAnswerButton.isEnabled = false
+        noAnswerButton.isEnabled = false
+    }
+    
+    private func enableAnswerButtons() {
+        yesAnswerButton.isEnabled = true
+        noAnswerButton.isEnabled = true
+    }
+    
     private func handleAnswerResult(answer: Bool) {
+        disableAnswerButtons()
         let correctAnswer = questions[currentQuestionIndex].correctAnswer
         let isCorrectAnswer: Bool = correctAnswer == answer
         if isCorrectAnswer {
@@ -67,12 +90,14 @@ final class MovieQuizViewController: UIViewController {
         showAnswerResult(isCorrect: isCorrectAnswer)
         let isQuizFinished: Bool = currentQuestionIndex == questions.count - 1
         if isQuizFinished {
-            show(quiz: QuizResultsViewModel(title: "Раунд окончен!", text: "Ваш результат: \(correctAnswers)/\(questions.count)", buttonText: "Ок"), )
+            show(quiz: QuizResultsViewModel(title: "Раунд окончен!", text: "Ваш результат: \(correctAnswers)/\(questions.count)", buttonText: "Ок"))
+            enableAnswerButtons()
         } else {
             currentQuestionIndex += 1
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 self.showQuestionHandler()
                 self.resetImageBorderStyle()
+                self.enableAnswerButtons()
             }
 
         }
@@ -116,7 +141,7 @@ final class MovieQuizViewController: UIViewController {
         imageView.layer.masksToBounds = true
         imageView.layer.borderWidth = width
         imageView.layer.borderColor = color.cgColor
-        imageView.layer.cornerRadius = 8
+        imageView.layer.cornerRadius = 20
     }
     
     private func showAnswerResult(isCorrect: Bool) {
