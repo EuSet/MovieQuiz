@@ -76,7 +76,7 @@ class StatisticService: StatisticServiceProtocol {
     }
     
     private func storeGamesCount() {
-        storage.set(self.gamesCount + 1, forKey: Keys.gamesCount.rawValue)
+        storage.set(self.gamesCount + 1, forKey:Keys.gamesCount.rawValue)
     }
     
     init() {}

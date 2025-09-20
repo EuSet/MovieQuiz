@@ -89,6 +89,7 @@
 		6113423A2B701CF8003FC2A4 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				4496BA282E7C817F005D1821 /* StatisticService.swift */,
 				4496BA262E7C7AC5005D1821 /* StatisticServiceProtocol.swift */,
 				44489A7D2E7579930023042E /* AlertPresenterProtocol.swift */,
 				44489A7B2E7574060023042E /* AlertPresenterDelegate.swift */,
@@ -102,7 +103,6 @@
 		8F4738322848DE2A005DF65E /* Presentation */ = {
 			isa = PBXGroup;
 			children = (
-				4496BA282E7C817F005D1821 /* StatisticService.swift */,
 				44489A792E7573330023042E /* AlertPresenter.swift */,
 				AD1ABAB52831907B00B3E448 /* MovieQuizViewController.swift */,
 				AD1ABAB72831907B00B3E448 /* Main.storyboard */,
