@@ -14,37 +14,11 @@ final class MovieQuizViewController: UIViewController {
     // MARK: - Private Properties
     private var currentQuestionIndex = 0
     private var correctAnswers = 0
-    
-    private struct QuizQuestion {
-      let image: String
-      let text: String
-      let correctAnswer: Bool
-    }
-
-    private struct QuizStepViewModel {
-      let image: UIImage
-      let question: String
-      let questionNumber: String
-    }
-
-    private struct QuizResultsViewModel {
-      let title: String
-      let text: String
-      let buttonText: String
-    }
-    
-    private let questions: [QuizQuestion] = [
-        QuizQuestion(image: "The Godfather", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: true),
-        QuizQuestion(image: "The Dark Knight", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: true),
-        QuizQuestion(image: "Kill Bill", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: true),
-        QuizQuestion(image: "The Avengers", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: true),
-        QuizQuestion(image: "Deadpool", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: true),
-        QuizQuestion(image: "The Green Knight", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: false),
-        QuizQuestion(image: "Old", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: false),
-        QuizQuestion(image: "The Ice Age Adventures of Buck Wild", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: false),
-        QuizQuestion(image: "Tesla", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: false),
-        QuizQuestion(image: "Vivarium", text: "Рейтинг этого фильма больше чем 6?", correctAnswer: false),
-    ]
+    private let questionsAmount: Int = 10
+    private var questionFactory: QuestionFactoryProtocol?
+    private var currentQuestion: QuizQuestion?
+    private var alertPresenter: AlertPresenterProtocol?
+    private var statisticService: StatisticServiceProtocol?
     
     // MARK: - View Life Cycles
     override func viewDidLoad() {
@@ -56,8 +30,10 @@ final class MovieQuizViewController: UIViewController {
         questionTitleLabel.font = UIFont(name: AppFontName.displayMedium, size: 20)
         yesAnswerButton.titleLabel?.font = UIFont(name: AppFontName.displayMedium, size: 20)
         noAnswerButton.titleLabel?.font = UIFont(name: AppFontName.displayMedium, size: 20)
-        showQuestionHandler()
-        
+        questionFactory = QuestionFactory(delegate: self)
+        questionFactory?.requestNextQuestion()
+        alertPresenter = AlertPresenter(delegate: self)
+        statisticService = StatisticService()
     }
     
     // MARK: - IB Actions
@@ -81,21 +57,40 @@ final class MovieQuizViewController: UIViewController {
     }
     
     private func handleAnswerResult(answer: Bool) {
+        guard let correctAnswer = currentQuestion?.correctAnswer else {
+            return
+        }
         disableAnswerButtons()
-        let correctAnswer = questions[currentQuestionIndex].correctAnswer
         let isCorrectAnswer: Bool = correctAnswer == answer
         if isCorrectAnswer {
             correctAnswers += 1
         }
         showAnswerResult(isCorrect: isCorrectAnswer)
-        let isQuizFinished: Bool = currentQuestionIndex == questions.count - 1
+        let isQuizFinished: Bool = currentQuestionIndex == questionsAmount - 1
         if isQuizFinished {
-            show(quiz: QuizResultsViewModel(title: "Раунд окончен!", text: "Ваш результат: \(correctAnswers)/\(questions.count)", buttonText: "Ок"))
+            statisticService?.store(correct: correctAnswers, total: questionsAmount)
+            let alertInfoMessage = createAlertInfoMessage()
+            let result = QuizResultsViewModel(title: "Раунд окончен!", text: alertInfoMessage, buttonText: "Ок")
+            let alertModel = AlertModel(
+                title: result.title,
+                message: result.text,
+                buttonText: result.buttonText,
+                completion: { [weak self] in
+                    guard let self else { return }
+                    self.correctAnswers = 0
+                    self.currentQuestionIndex = 0
+                    self.resetImageBorderStyle()
+                    self.questionFactory?.requestNextQuestion()
+                    
+                }
+            )
+            alertPresenter?.createAlert(model: alertModel)
             enableAnswerButtons()
         } else {
             currentQuestionIndex += 1
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                self.showQuestionHandler()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self else { return }
+                self.questionFactory?.requestNextQuestion()
                 self.resetImageBorderStyle()
                 self.enableAnswerButtons()
             }
@@ -103,11 +98,21 @@ final class MovieQuizViewController: UIViewController {
         }
     }
     
+    private func createAlertInfoMessage() -> String {
+        guard let statisticService else {
+            return "Ваш результат: \(correctAnswers)/\(questionsAmount)"
+        }
+        let gamesCount = statisticService.gamesCount
+        let bestGame = statisticService.bestGame
+        let totalAccuracy = statisticService.totalAccuracy
+        return "Ваш результат: \(correctAnswers)/\(questionsAmount)\nКоличество сыгранных квизов: \(gamesCount)\nРекорд: \(bestGame.correct)/\(bestGame.total) (\(bestGame.date.dateTimeString))\nСредняя точность \(String(format: "%.2f", totalAccuracy))%"
+    }
+    
     private func convert(model: QuizQuestion) -> QuizStepViewModel {
       return QuizStepViewModel(
             image: UIImage(named: model.image)!,
             question: model.text,
-            questionNumber: "\(currentQuestionIndex + 1)/\(questions.count)"
+            questionNumber: "\(currentQuestionIndex + 1)/\(questionsAmount)"
         )
     }
     
@@ -117,24 +122,12 @@ final class MovieQuizViewController: UIViewController {
         questionCounterLabel.text = step.questionNumber
     }
     
-    private func show(quiz result: QuizResultsViewModel) {
-        let alert = UIAlertController(title: result.title,
-                                      message: result.text,
-                                      preferredStyle: .alert)
-
-        let action = UIAlertAction(title: result.buttonText, style: .default) { _ in
-            self.correctAnswers = 0
-            self.currentQuestionIndex = 0
-            self.resetImageBorderStyle()
-            self.showQuestionHandler()
+    private func showQuestionHandler(current question: QuizQuestion) {
+        self.currentQuestion = question
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.show(quiz: self.convert(model: question))
         }
-        alert.addAction(action)
-        self.present(alert, animated: true, completion: nil)
-    }
-    
-    private func showQuestionHandler() {
-        let currentQuestion = questions[currentQuestionIndex]
-        show(quiz: convert(model: currentQuestion))
     }
     
     private func setImageBorderStyle(_ color: UIColor, _ width: CGFloat) {
@@ -153,66 +146,19 @@ final class MovieQuizViewController: UIViewController {
     }
 }
 
-/*
- Mock-данные
- 
- 
- Картинка: The Godfather
- Настоящий рейтинг: 9,2
- Вопрос: Рейтинг этого фильма больше чем 6?
- Ответ: ДА
- 
- 
- Картинка: The Dark Knight
- Настоящий рейтинг: 9
- Вопрос: Рейтинг этого фильма больше чем 6?
- Ответ: ДА
- 
- 
- Картинка: Kill Bill
- Настоящий рейтинг: 8,1
- Вопрос: Рейтинг этого фильма больше чем 6?
- Ответ: ДА
- 
- 
- Картинка: The Avengers
- Настоящий рейтинг: 8
- Вопрос: Рейтинг этого фильма больше чем 6?
- Ответ: ДА
- 
- 
- Картинка: Deadpool
- Настоящий рейтинг: 8
- Вопрос: Рейтинг этого фильма больше чем 6?
- Ответ: ДА
- 
- 
- Картинка: The Green Knight
- Настоящий рейтинг: 6,6
- Вопрос: Рейтинг этого фильма больше чем 6?
- Ответ: ДА
- 
- 
- Картинка: Old
- Настоящий рейтинг: 5,8
- Вопрос: Рейтинг этого фильма больше чем 6?
- Ответ: НЕТ
- 
- 
- Картинка: The Ice Age Adventures of Buck Wild
- Настоящий рейтинг: 4,3
- Вопрос: Рейтинг этого фильма больше чем 6?
- Ответ: НЕТ
- 
- 
- Картинка: Tesla
- Настоящий рейтинг: 5,1
- Вопрос: Рейтинг этого фильма больше чем 6?
- Ответ: НЕТ
- 
- 
- Картинка: Vivarium
- Настоящий рейтинг: 5,8
- Вопрос: Рейтинг этого фильма больше чем 6?
- Ответ: НЕТ
-*/
+extension MovieQuizViewController: QuestionFactoryDelegate {
+    func didRecieveNextQuestion(_ question: QuizQuestion?) {
+        guard let question else {
+            return //error handler
+        }
+        showQuestionHandler(current: question)
+    }
+}
+
+extension MovieQuizViewController: AlertPresenterDelegate {
+    func showAlert(alert: UIAlertController) {
+        self.present(alert, animated: true, completion: nil)
+    }
+}
+
+
